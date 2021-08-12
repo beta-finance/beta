@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
 contract BetaRunnerWithCallback {
   address private constant NO_CALLER = address(42); // nonzero so we don't repeatedly clear storage

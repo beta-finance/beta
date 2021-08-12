@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/token/ERC20/utils/SafeERC20.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/token/ERC20/utils/SafeERC20.sol';
 
 import './BetaRunnerBase.sol';
 import './BetaRunnerWithCallback.sol';

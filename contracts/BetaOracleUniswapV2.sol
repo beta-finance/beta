@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
 import '../interfaces/IUniswapV2Factory.sol';
 import '../interfaces/IUniswapV2Pair.sol';
@@ -9,10 +9,9 @@ import '../interfaces/IBetaOracle.sol';
 contract BetaOracleUniswapV2 is IBetaOracle {
   event SetGovernor(address governor);
   event SetPendingGovernor(address pendingGovernor);
-  event AcceptGovernor(address governor);
   event Initialize(address token);
-  event Observe(address token, uint224 price);
-  event SetExternal(address token, address ext);
+  event Observe(address indexed token, uint224 price);
+  event SetExternal(address indexed token, address ext);
 
   struct Observation {
     uint lastCumu;
@@ -29,11 +28,18 @@ contract BetaOracleUniswapV2 is IBetaOracle {
   mapping(address => Observation) public observations;
   mapping(address => address) public exts;
 
+  /// @dev Initializes the oracle contract.
+  /// @param _weth WETH address.
+  /// @param _factory Uniswap V2 factory address.
+  /// @param _minTwapTime Minimum interval for TWAP time (in seconds).
   constructor(
     address _weth,
     address _factory,
     uint32 _minTwapTime
   ) {
+    require(_weth != address(0), 'constructor/weth-zero-address');
+    require(_factory != address(0), 'constructor/factory-zero-address');
+    require(_minTwapTime != 0, 'constructor/min-twap-time-zero-value');
     weth = _weth;
     factory = _factory;
     minTwapTime = _minTwapTime;
@@ -54,7 +60,7 @@ contract BetaOracleUniswapV2 is IBetaOracle {
     require(msg.sender == pendingGovernor, 'acceptGovernor/not-pending-governor');
     pendingGovernor = address(0);
     governor = msg.sender;
-    emit AcceptGovernor(msg.sender);
+    emit SetGovernor(msg.sender);
   }
 
   /// @dev Updates the external feed contract address for the given tokens by the governor.
@@ -69,6 +75,7 @@ contract BetaOracleUniswapV2 is IBetaOracle {
   }
 
   /// @dev Initializes data points for price from pair for the given token.
+  /// @param token The token to initialize the price.
   function initPriceFromPair(address token) public {
     Observation storage obs = observations[token];
     require(obs.timestamp == 0, 'initPriceFromPair/already-initialized');
@@ -80,6 +87,7 @@ contract BetaOracleUniswapV2 is IBetaOracle {
   }
 
   /// @dev Utility functions to initialize multiple pair prices at once.
+  /// @param tokens Token list to mass initialize the prices.
   function massInitPriceFromPair(address[] calldata tokens) external {
     for (uint idx = 0; idx < tokens.length; idx++) {
       initPriceFromPair(tokens[idx]);
@@ -87,6 +95,7 @@ contract BetaOracleUniswapV2 is IBetaOracle {
   }
 
   /// @dev Updates price info for the given token and returns the last price.
+  /// @param token The token to update token-WETH pair price.
   function updatePriceFromPair(address token) public returns (uint) {
     Observation storage obs = observations[token];
     uint32 lastObserved = obs.timestamp;
@@ -110,6 +119,7 @@ contract BetaOracleUniswapV2 is IBetaOracle {
   }
 
   /// @dev Utility functions to update multiple pair prices at once.
+  /// @param tokens Token list to mass update prices.
   function massUpdatePriceFromPair(address[] calldata tokens)
     external
     returns (uint[] memory prices)
@@ -121,6 +131,7 @@ contract BetaOracleUniswapV2 is IBetaOracle {
   }
 
   /// @dev Returns the price of the given asset in terms of ETH (wei), multiplied by 2**112.
+  /// @param token The token to get asset price of.
   function getAssetETHPrice(address token) public override returns (uint) {
     if (token == weth) {
       return (1 << 112);

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/access/Ownable.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/token/ERC20/IERC20.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/token/ERC20/utils/SafeERC20.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/utils/math/Math.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/access/Ownable.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/token/ERC20/IERC20.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/token/ERC20/utils/SafeERC20.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/utils/math/Math.sol';
 
 import '../interfaces/IBetaBank.sol';
 import '../interfaces/IWETH.sol';
@@ -23,8 +23,8 @@ contract BetaRunnerBase is Ownable {
   constructor(address _betaBank, address _weth) {
     address bweth = IBetaBank(_betaBank).bTokens(_weth);
     require(bweth != address(0), 'BetaRunnerBase/no-bweth');
-    require(IWETH(_weth).approve(_betaBank, type(uint).max));
-    require(IWETH(_weth).approve(bweth, type(uint).max));
+    IERC20(_weth).safeApprove(_betaBank, type(uint).max);
+    IERC20(_weth).safeApprove(bweth, type(uint).max);
     betaBank = _betaBank;
     weth = _weth;
   }

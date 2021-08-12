@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
 interface IBetaInterestModel {
   /// @dev Returns the initial interest rate per year (times 1e18).

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/token/ERC20/utils/SafeERC20.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/token/ERC20/utils/SafeERC20.sol';
 
 import './BetaRunnerBase.sol';
 import './BetaRunnerWithCallback.sol';
@@ -63,22 +63,20 @@ contract BetaRunnerUniswapV3 is BetaRunnerBase, BetaRunnerWithCallback, IUniswap
     _transferIn(collateral, msg.sender, _data.amountPutExtra);
     (address tokenIn, address tokenOut, uint24 fee) = _data.path.decodeFirstPool();
     bool zeroForOne = tokenIn < tokenOut;
-    CallbackData memory cb =
-      CallbackData({
-        pid: _data.pid,
-        path0: tokenIn,
-        amount0: _data.amountBorrow,
-        memo: _data.amountPutExtra.toInt256(),
-        path: _data.path
-      });
-    (int amount0, int amount1) =
-      IUniswapV3Pool(_poolFor(tokenIn, tokenOut, fee)).swap(
-        address(this),
-        zeroForOne,
-        _data.amountBorrow.toInt256(),
-        zeroForOne ? MIN_SQRT_RATIO + 1 : MAX_SQRT_RATIO - 1,
-        abi.encode(cb)
-      );
+    CallbackData memory cb = CallbackData({
+      pid: _data.pid,
+      path0: tokenIn,
+      amount0: _data.amountBorrow,
+      memo: _data.amountPutExtra.toInt256(),
+      path: _data.path
+    });
+    (int amount0, int amount1) = IUniswapV3Pool(_poolFor(tokenIn, tokenOut, fee)).swap(
+      address(this),
+      zeroForOne,
+      _data.amountBorrow.toInt256(),
+      zeroForOne ? MIN_SQRT_RATIO + 1 : MAX_SQRT_RATIO - 1,
+      abi.encode(cb)
+    );
     uint amountReceived = amount0 > 0 ? uint(-amount1) : uint(-amount0);
     require(amountReceived >= _data.amountOutMin, '!slippage');
   }
@@ -88,22 +86,20 @@ contract BetaRunnerUniswapV3 is BetaRunnerBase, BetaRunnerWithCallback, IUniswap
     uint amountRepay = _capRepay(msg.sender, _data.pid, _data.amountRepay);
     (address tokenOut, address tokenIn, uint24 fee) = _data.path.decodeFirstPool();
     bool zeroForOne = tokenIn < tokenOut;
-    CallbackData memory cb =
-      CallbackData({
-        pid: _data.pid,
-        path0: tokenOut,
-        amount0: amountRepay,
-        memo: -_data.amountTake.toInt256(),
-        path: _data.path
-      });
-    (int amount0, int amount1) =
-      IUniswapV3Pool(_poolFor(tokenIn, tokenOut, fee)).swap(
-        address(this),
-        zeroForOne,
-        -amountRepay.toInt256(),
-        zeroForOne ? MIN_SQRT_RATIO + 1 : MAX_SQRT_RATIO - 1,
-        abi.encode(cb)
-      );
+    CallbackData memory cb = CallbackData({
+      pid: _data.pid,
+      path0: tokenOut,
+      amount0: amountRepay,
+      memo: -_data.amountTake.toInt256(),
+      path: _data.path
+    });
+    (int amount0, int amount1) = IUniswapV3Pool(_poolFor(tokenIn, tokenOut, fee)).swap(
+      address(this),
+      zeroForOne,
+      -amountRepay.toInt256(),
+      zeroForOne ? MIN_SQRT_RATIO + 1 : MAX_SQRT_RATIO - 1,
+      abi.encode(cb)
+    );
     uint amountPaid = amount0 > 0 ? uint(amount0) : uint(amount1);
     require(amountPaid <= _data.amountInMax, '!slippage');
   }
@@ -115,10 +111,9 @@ contract BetaRunnerUniswapV3 is BetaRunnerBase, BetaRunnerWithCallback, IUniswap
     bytes calldata _data
   ) external override isCallback {
     CallbackData memory data = abi.decode(_data, (CallbackData));
-    (uint amountToPay, uint amountReceived) =
-      _amount0Delta > 0
-        ? (uint(_amount0Delta), uint(-_amount1Delta))
-        : (uint(_amount1Delta), uint(-_amount0Delta));
+    (uint amountToPay, uint amountReceived) = _amount0Delta > 0
+      ? (uint(_amount0Delta), uint(-_amount1Delta))
+      : (uint(_amount1Delta), uint(-_amount0Delta));
     if (data.memo > 0) {
       _shortCallback(amountToPay, amountReceived, data);
     } else {

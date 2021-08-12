@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
 import '../interfaces/IBetaConfig.sol';
 
@@ -12,11 +12,15 @@ contract BetaConfig is IBetaConfig {
 
   event SetGovernor(address governor);
   event SetPendingGovernor(address pendingGovernor);
-  event AcceptGovernor(address governor);
-  event SetCollFactor(address token, uint factor);
-  event SetRiskLevel(address token, uint level);
-  event SetRiskConfig(uint level, uint64 safetyLTV, uint64 liquidationLTV, uint64 killBountyRate);
-  event SetReserveInfo(address beneficiary, uint rate);
+  event SetCollFactor(address indexed token, uint factor);
+  event SetRiskLevel(address indexed token, uint level);
+  event SetRiskConfig(
+    uint indexed level,
+    uint64 safetyLTV,
+    uint64 liquidationLTV,
+    uint64 killBountyRate
+  );
+  event SetReserveInfo(address indexed beneficiary, uint rate);
 
   address public governor;
   address public pendingGovernor;
@@ -46,7 +50,7 @@ contract BetaConfig is IBetaConfig {
     require(msg.sender == pendingGovernor, 'acceptGovernor/not-pending-governor');
     pendingGovernor = address(0);
     governor = msg.sender;
-    emit AcceptGovernor(msg.sender);
+    emit SetGovernor(msg.sender);
   }
 
   /// @dev Updates collateral factors of the given tokens.
@@ -110,7 +114,7 @@ contract BetaConfig is IBetaConfig {
   }
 
   /// @dev Returns the risk level of the given token. Zero is the default value of all tokens.
-  function getRiskLevel(address _token) public view returns (uint) {
+  function getRiskLevel(address _token) public view override returns (uint) {
     uint level = rLevels[_token];
     require(level != type(uint).max, 'getRiskLevel/bad-risk-level');
     return level;

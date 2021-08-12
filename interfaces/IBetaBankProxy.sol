@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.6;
 
-interface IBetaBank {
+interface IBetaBankProxy {
   /// @dev Returns the address of BToken of the given underlying token, or 0 if not exists.
   function bTokens(address _underlying) external view returns (address);
 
@@ -23,11 +23,17 @@ interface IBetaBank {
     view
     returns (address _collateral, address _bToken);
 
+  /// @dev Sets the whitelist statuses for the given runners. Must only be called by the governor.
+  function setRunnerWhitelists(address[] calldata _runners, bool ok) external;
+
   /// @dev Returns the debt of the given position. Can't be view as it needs to call accrue.
   function fetchPositionDebt(address _owner, uint _pid) external returns (uint);
 
   /// @dev Returns the LTV of the given position. Can't be view as it needs to call accrue.
   function fetchPositionLTV(address _owner, uint _pid) external returns (uint);
+
+  /// @dev Creates a new money market for the given underlying token. Permissionless.
+  function create(address underlying) external returns (address bToken);
 
   /// @dev Opens a new position in the Beta smart contract.
   function open(

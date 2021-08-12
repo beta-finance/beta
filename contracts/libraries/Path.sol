@@ -5,7 +5,7 @@
  *
  * @dev Provides functions to easily interact with encoded paths for Uniswap V3.
  */
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
 import './BytesLib.sol';
 

@@ -1,47 +1,43 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/token/ERC20/utils/SafeERC20.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/security/ReentrancyGuard.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/security/Pausable.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/token/ERC20/utils/SafeERC20.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/security/ReentrancyGuard.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/security/Pausable.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/utils/math/Math.sol';
 
 import '../interfaces/IBetaBank.sol';
 import '../interfaces/IBetaConfig.sol';
 import '../interfaces/IBetaInterestModel.sol';
 
-interface IERC20Metadata {
-  /// @dev Returns the name of the token.
-  function name() external view returns (string memory);
-
-  /// @dev Returns the symbol of the token.
-  function symbol() external view returns (string memory);
-
-  /// @dev Returns the decimals places of the token.
-  function decimals() external view returns (uint8);
-}
-
 contract BToken is ERC20Permit, ReentrancyGuard {
   using SafeERC20 for IERC20;
-  uint public constant MINIMUM_LIQUIDITY = 10**6;
 
   event Accrue(uint interest);
-  event Mint(address caller, address to, uint amount, uint credit);
-  event Burn(address caller, address to, uint amount, uint credit);
+  event Mint(address indexed caller, address indexed to, uint amount, uint credit);
+  event Burn(address indexed caller, address indexed to, uint amount, uint credit);
 
-  address public immutable betaBank;
-  address public immutable underlying;
+  uint public constant MINIMUM_LIQUIDITY = 10**6; // minimum liquidity to be locked in the pool when first mint occurs
 
-  uint public interestRate;
-  uint public lastAccrueTime;
-  uint public totalAvailable;
-  uint public totalLoan;
-  uint public totalDebtShare;
+  address public immutable betaBank; // BetaBank address
+  address public immutable underlying; // the underlying token
 
+  uint public interestRate; // current interest rate
+  uint public lastAccrueTime; // last interest accrual timestamp
+  uint public totalLoanable; // total asset amount available to be borrowed
+  uint public totalLoan; // total amount of loan
+  uint public totalDebtShare; // total amount of debt share
+
+  /// @dev Initializes the BToken contract.
+  /// @param _betaBank BetaBank address.
+  /// @param _underlying The underlying token address for the bToken.
   constructor(address _betaBank, address _underlying)
     ERC20Permit('B Token')
     ERC20('B Token', 'bTOKEN')
   {
+    require(_betaBank != address(0), 'constructor/betabank-zero-address');
+    require(_underlying != address(0), 'constructor/underlying-zero-address');
     betaBank = _betaBank;
     underlying = _underlying;
     interestRate = IBetaInterestModel(IBetaBank(_betaBank).interestModel()).initialRate();
@@ -66,7 +62,7 @@ contract BToken is ERC20Permit, ReentrancyGuard {
     }
   }
 
-  /// @dev Returns the decimals places of the token.
+  /// @dev Returns the decimal places of the token.
   function decimals() public view override returns (uint8) {
     try IERC20Metadata(underlying).decimals() returns (uint8 data) {
       return data;
@@ -75,24 +71,27 @@ contract BToken is ERC20Permit, ReentrancyGuard {
     }
   }
 
-  /// @dev Accrues interest rate and adjust the rate. Can be called by anyone at any time.
+  /// @dev Accrues interest rate and adjusts the rate. Can be called by anyone at any time.
   function accrue() public {
     // 1. Check time past condition
-    uint timePast = block.timestamp - lastAccrueTime;
-    if (timePast <= 0) return;
+    uint timePassed = block.timestamp - lastAccrueTime;
+    if (timePassed == 0) return;
     lastAccrueTime = block.timestamp;
     // 2. Check bank pause condition
     require(!Pausable(betaBank).paused(), 'BetaBank/paused');
     // 3. Compute the accrued interest value over the past time
-    (uint totalLoan_, uint totalAvailable_, uint interestRate_) =
-      (totalLoan, totalAvailable, interestRate); // gas saving by avoiding multiple SLOADs
+    (uint totalLoan_, uint totalLoanable_, uint interestRate_) = (
+      totalLoan,
+      totalLoanable,
+      interestRate
+    ); // gas saving by avoiding multiple SLOADs
     IBetaConfig config = IBetaConfig(IBetaBank(betaBank).config());
     IBetaInterestModel model = IBetaInterestModel(IBetaBank(betaBank).interestModel());
-    uint interest = (interestRate_ * totalLoan_ * timePast) / (365 days) / 1e18;
+    uint interest = (interestRate_ * totalLoan_ * timePassed) / (365 days) / 1e18;
     // 4. Update total loan and next interest rate
     totalLoan_ += interest;
     totalLoan = totalLoan_;
-    interestRate = model.getNextInterestRate(interestRate_, totalAvailable_, totalLoan_, timePast);
+    interestRate = model.getNextInterestRate(interestRate_, totalLoanable_, totalLoan_, timePassed);
     // 5. Send a portion of collected interest to the beneficiary
     if (interest > 0) {
       uint reserveRate = config.reserveRate();
@@ -100,7 +99,7 @@ contract BToken is ERC20Permit, ReentrancyGuard {
         uint toReserve = (interest * reserveRate) / 1e18;
         _mint(
           config.reserveBeneficiary(),
-          (toReserve * totalSupply()) / (totalLoan_ + totalAvailable_ - toReserve)
+          (toReserve * totalSupply()) / (totalLoan_ + totalLoanable_ - toReserve)
         );
       }
       emit Accrue(interest);
@@ -113,7 +112,7 @@ contract BToken is ERC20Permit, ReentrancyGuard {
     if (_debtShare == 0) {
       return 0;
     }
-    return ((_debtShare * totalLoan) + totalDebtShare - 1) / totalDebtShare; // round up
+    return Math.ceilDiv(_debtShare * totalLoan, totalDebtShare); // round up
   }
 
   /// @dev Mints new bToken to the given address.
@@ -133,13 +132,13 @@ contract BToken is ERC20Permit, ReentrancyGuard {
     if (supply == 0) {
       credit = amount - MINIMUM_LIQUIDITY;
       // Permanently lock the first MINIMUM_LIQUIDITY tokens
-      totalAvailable += credit;
+      totalLoanable += credit;
       totalLoan += MINIMUM_LIQUIDITY;
       totalDebtShare += MINIMUM_LIQUIDITY;
       _mint(address(1), MINIMUM_LIQUIDITY); // OpenZeppelin ERC20 does not allow minting to 0
     } else {
-      credit = (amount * supply) / (totalAvailable + totalLoan);
-      totalAvailable += amount;
+      credit = (amount * supply) / (totalLoanable + totalLoan);
+      totalLoanable += amount;
     }
     require(credit > 0, 'mint/no-credit-minted');
     _mint(_to, credit);
@@ -153,9 +152,9 @@ contract BToken is ERC20Permit, ReentrancyGuard {
   function burn(address _to, uint _credit) external nonReentrant returns (uint amount) {
     accrue();
     uint supply = totalSupply();
-    amount = (_credit * (totalAvailable + totalLoan)) / supply;
+    amount = (_credit * (totalLoanable + totalLoan)) / supply;
     require(amount > 0, 'burn/no-amount-returned');
-    totalAvailable -= amount;
+    totalLoanable -= amount;
     _burn(msg.sender, _credit);
     IERC20(underlying).safeTransfer(_to, amount);
     emit Burn(msg.sender, _to, amount, _credit);
@@ -164,13 +163,13 @@ contract BToken is ERC20Permit, ReentrancyGuard {
   /// @dev Borrows the funds for the given address. Must only be called by BetaBank.
   /// @param _to The address to borrow the funds for.
   /// @param _amount The amount to borrow.
-  /// @param debtShare The amount of new debt share minted.
+  /// @return debtShare The amount of new debt share minted.
   function borrow(address _to, uint _amount) external nonReentrant returns (uint debtShare) {
     require(msg.sender == betaBank, 'borrow/not-BetaBank');
     accrue();
     IERC20(underlying).safeTransfer(_to, _amount);
-    debtShare = ((_amount * totalDebtShare) + totalLoan - 1) / totalLoan; // round up
-    totalAvailable -= _amount;
+    debtShare = Math.ceilDiv(_amount * totalDebtShare, totalLoan); // round up
+    totalLoanable -= _amount;
     totalLoan += _amount;
     totalDebtShare += debtShare;
   }
@@ -191,7 +190,7 @@ contract BToken is ERC20Permit, ReentrancyGuard {
     }
     require(amount <= totalLoan, 'repay/amount-too-high');
     debtShare = (amount * totalDebtShare) / totalLoan; // round down
-    totalAvailable += amount;
+    totalLoanable += amount;
     totalLoan -= amount;
     totalDebtShare -= debtShare;
     require(totalDebtShare >= MINIMUM_LIQUIDITY, 'repay/too-low-sum-debt-share');

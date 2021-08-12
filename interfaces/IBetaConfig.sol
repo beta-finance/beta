@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
 interface IBetaConfig {
+  /// @dev Returns the risk level for the given asset.
+  function getRiskLevel(address token) external view returns (uint);
+
   /// @dev Returns the rate of interest collected to be distributed to the protocol reserve.
   function reserveRate() external view returns (uint);
 

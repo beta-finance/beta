@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/token/ERC20/IERC20.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/token/ERC20/utils/SafeERC20.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/proxy/utils/Initializable.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/security/Pausable.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/utils/Address.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/utils/math/Math.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/token/ERC20/IERC20.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/token/ERC20/utils/SafeERC20.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/proxy/utils/Initializable.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/security/Pausable.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/utils/Address.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/utils/math/Math.sol';
 
 import './BToken.sol';
 import './BTokenDeployer.sol';
@@ -40,12 +40,11 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
   );
   event SetGovernor(address governor);
   event SetPendingGovernor(address pendingGovernor);
-  event AcceptGovernor(address governor);
   event SetOracle(address oracle);
   event SetConfig(address config);
   event SetInterestModel(address interestModel);
-  event SetRunnerWhitelist(address runner, bool ok);
-  event SetOwnerWhitelist(address owner, bool ok);
+  event SetRunnerWhitelist(address indexed runner, bool ok);
+  event SetOwnerWhitelist(address indexed owner, bool ok);
   event SetAllowPublicCreate(bool ok);
 
   struct Position {
@@ -57,23 +56,24 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
     uint debtShare;
   }
 
-  uint private unlocked;
-  address public deployer;
-  address public override oracle;
-  address public override config;
-  address public override interestModel;
-  address public governor;
-  address public pendingGovernor;
-  bool public allowPublicCreate;
+  uint private unlocked; // reentrancy variable
+  address public deployer; // deployer address
+  address public override oracle; // oracle address
+  address public override config; // config address
+  address public override interestModel; // interest rate model address
+  address public governor; // current governor
+  address public pendingGovernor; // pending governor
+  bool public allowPublicCreate; // allow public to create pool status
 
-  mapping(address => address) public override bTokens;
-  mapping(address => address) public override underlyings;
+  mapping(address => address) public override bTokens; // mapping from underlying to bToken
+  mapping(address => address) public override underlyings; // mapping from bToken to underlying token
   mapping(address => bool) public runnerWhitelists; // whitelist of authorized routers
   mapping(address => bool) public ownerWhitelists; // whitelist of authorized owners
 
-  mapping(address => mapping(uint => Position)) public positions;
-  mapping(address => uint) public nextPositionIds;
+  mapping(address => mapping(uint => Position)) public positions; // mapping from user to pool id to Position info
+  mapping(address => uint) public nextPositionIds; // mapping from user to next position id (position count)
 
+  /// @dev Reentrancy guard modifier
   modifier lock() {
     require(unlocked == 1, 'BetaBank/locked');
     unlocked = 2;
@@ -81,22 +81,25 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
     unlocked = 1;
   }
 
+  /// @dev Only governor is allowed modifier.
   modifier onlyGov() {
     require(msg.sender == governor, 'BetaBank/onlyGov');
     _;
   }
 
-  modifier onlyOwner(address _owner) {
-    require(allowActionFor(_owner, msg.sender), 'BetaBank/onlyOwner');
+  /// @dev Check if sender is allowed to perform action on behalf of the owner modifier.
+  modifier isPermittedByOwner(address _owner) {
+    require(isPermittedCaller(_owner, msg.sender), 'BetaBank/isPermittedByOwner');
     _;
   }
 
+  /// @dev Check is pool id exist for the owner modifier.
   modifier checkPID(address _owner, uint _pid) {
     require(_pid < nextPositionIds[_owner], 'BetaBank/checkPID');
     _;
   }
 
-  /// @dev Initializes this smart contract. Not constructor to make this upgradable.
+  /// @dev Initializes this smart contract. No constructor to make this upgradable.
   function initialize(
     address _governor,
     address _deployer,
@@ -104,6 +107,11 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
     address _config,
     address _interestModel
   ) external initializer {
+    require(_governor != address(0), 'initialize/governor-zero-address');
+    require(_deployer != address(0), 'initialize/deployer-zero-address');
+    require(_oracle != address(0), 'initialize/oracle-zero-address');
+    require(_config != address(0), 'initialize/config-zero-address');
+    require(_interestModel != address(0), 'initialize/interest-model-zero-address');
     governor = _governor;
     deployer = _deployer;
     oracle = _oracle;
@@ -128,23 +136,26 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
     require(msg.sender == pendingGovernor, 'acceptGovernor/not-pending-governor');
     pendingGovernor = address(0);
     governor = msg.sender;
-    emit AcceptGovernor(msg.sender);
+    emit SetGovernor(msg.sender);
   }
 
   /// @dev Updates the oracle address. Must only be called by the governor.
   function setOracle(address _oracle) external onlyGov {
+    require(_oracle != address(0), 'setOracle/zero-address');
     oracle = _oracle;
     emit SetOracle(_oracle);
   }
 
   /// @dev Updates the config address. Must only be called by the governor.
   function setConfig(address _config) external onlyGov {
+    require(_config != address(0), 'setConfig/zero-address');
     config = _config;
     emit SetConfig(_config);
   }
 
   /// @dev Updates the interest model address. Must only be called by the governor.
   function setInterestModel(address _interestModel) external onlyGov {
+    require(_interestModel != address(0), 'setInterestModel/zero-address');
     interestModel = _interestModel;
     emit SetInterestModel(_interestModel);
   }
@@ -166,12 +177,12 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
   }
 
   /// @dev Pauses and stops money market-related interactions. Must only be called by the governor.
-  function pause() external onlyGov {
+  function pause() external whenNotPaused onlyGov {
     _pause();
   }
 
   /// @dev Unpauses and allows again money market-related interactions. Must only be called by the governor.
-  function unpause() external onlyGov {
+  function unpause() external whenPaused onlyGov {
     _unpause();
   }
 
@@ -196,7 +207,7 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
   }
 
   /// @dev Returns whether the given sender is allowed to interact with a position of the owner.
-  function allowActionFor(address _owner, address _sender) public view returns (bool) {
+  function isPermittedCaller(address _owner, address _sender) public view returns (bool) {
     // ONE OF THE TWO CONDITIONS MUST HOLD:
     // 1. allow if sender is owner and owner is whitelisted.
     // 2. allow if owner is origin tx sender (for extra safety) and sender is globally accepted.
@@ -240,13 +251,13 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
 
   /// @dev Opens a new position to borrow a specific token for a specific collateral.
   /// @param _owner The owner of the newly created position. Sender must be allowed to act for.
-  /// @param _underlying The token that is allowed to be borrow in this position.
-  /// @param _collateral The token that is is used as collateral in this position.
+  /// @param _underlying The token that is allowed to be borrowed in this position.
+  /// @param _collateral The token that is used as collateral in this position.
   function open(
     address _owner,
     address _underlying,
     address _collateral
-  ) external override whenNotPaused onlyOwner(_owner) returns (uint pid) {
+  ) external override whenNotPaused isPermittedByOwner(_owner) returns (uint pid) {
     address bToken = bTokens[_underlying];
     require(bToken != address(0), 'open/bad-underlying');
     require(_underlying != _collateral, 'open/self-collateral');
@@ -267,7 +278,7 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
     address _owner,
     uint _pid,
     uint _amount
-  ) external override lock whenNotPaused onlyOwner(_owner) checkPID(_owner, _pid) {
+  ) external override lock whenNotPaused isPermittedByOwner(_owner) checkPID(_owner, _pid) {
     // 1. pre-conditions
     Position memory pos = positions[_owner][_pid];
     require(pos.blockRepayTake != uint32(block.number), 'borrow/bad-block');
@@ -290,7 +301,7 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
     address _owner,
     uint _pid,
     uint _amount
-  ) external override lock whenNotPaused onlyOwner(_owner) checkPID(_owner, _pid) {
+  ) external override lock whenNotPaused isPermittedByOwner(_owner) checkPID(_owner, _pid) {
     // 1. pre-conditions
     Position memory pos = positions[_owner][_pid];
     require(pos.blockBorrowPut != uint32(block.number), 'repay/bad-block');
@@ -310,7 +321,7 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
     address _owner,
     uint _pid,
     uint _amount
-  ) external override lock whenNotPaused onlyOwner(_owner) checkPID(_owner, _pid) {
+  ) external override lock whenNotPaused isPermittedByOwner(_owner) checkPID(_owner, _pid) {
     // 1. pre-conditions
     Position memory pos = positions[_owner][_pid];
     require(pos.blockRepayTake != uint32(block.number), 'put/bad-block');
@@ -337,7 +348,7 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
     address _owner,
     uint _pid,
     uint _amount
-  ) external override lock whenNotPaused onlyOwner(_owner) checkPID(_owner, _pid) {
+  ) external override lock whenNotPaused isPermittedByOwner(_owner) checkPID(_owner, _pid) {
     // 1. pre-conditions
     Position memory pos = positions[_owner][_pid];
     require(pos.blockBorrowPut != uint32(block.number), 'take/bad-block');
@@ -356,7 +367,7 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
   /// @dev Liquidates the given position. Can be called by anyone but must be liquidatable.
   /// @param _owner The position owner to be liquidated.
   /// @param _pid The position id to be liquidated.
-  /// @param _amount The amount of debt to be repaid by caller. Must not exceed half debt.
+  /// @param _amount The amount of debt to be repaid by caller. Must not exceed half debt (rounded up).
   function liquidate(
     address _owner,
     uint _pid,
@@ -369,15 +380,14 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
     require(ltv >= IBetaConfig(config).getLiquidationLTV(underlying), 'liquidate/not-liquidatable');
     // 2. perform repayment
     uint debtShare = BToken(pos.bToken).repay(msg.sender, _amount);
-    require(debtShare <= pos.debtShare / 2, 'liquidate/too-much-liquidation');
+    require(debtShare <= (pos.debtShare + 1) / 2, 'liquidate/too-much-liquidation');
     // 3. calculate reward and payout
     uint debtValue = BToken(pos.bToken).fetchDebtShareValue(debtShare);
     uint collValue = IBetaOracle(oracle).convert(underlying, pos.collateral, debtValue);
-    uint payout =
-      Math.min(
-        collValue + (collValue * IBetaConfig(config).getKillBountyRate(underlying)) / 1e18,
-        pos.collateralSize
-      );
+    uint payout = Math.min(
+      collValue + (collValue * IBetaConfig(config).getKillBountyRate(underlying)) / 1e18,
+      pos.collateralSize
+    );
     // 4. update the position
     pos.debtShare -= debtShare;
     positions[_owner][_pid].debtShare = pos.debtShare;
@@ -391,7 +401,7 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
   /// @dev onlyGov selfless liquidation if collateral size = 0
   /// @param _owner The position owner to be liquidated.
   /// @param _pid The position id to be liquidated.
-  /// @param _amount The amount of debt to be repaid by caller. Must not exceed half debt.
+  /// @param _amount The amount of debt to be repaid by caller.
   function selflessLiquidate(
     address _owner,
     uint _pid,
@@ -399,7 +409,6 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
   ) external onlyGov lock checkPID(_owner, _pid) {
     // 1. check positions collateral size
     Position memory pos = positions[_owner][_pid];
-    address underlying = underlyings[pos.bToken];
     require(pos.collateralSize == 0, 'selflessLiquidate/positive-collateral');
     // 2. perform debt repayment
     uint debtValue = BToken(pos.bToken).fetchDebtShareValue(pos.debtShare);

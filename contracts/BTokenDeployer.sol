@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
 import './BToken.sol';
 
 contract BTokenDeployer {
   /// @dev Deploys a new BToken contract for the given underlying token.
-  function deploy(address _underlying) external returns (address bToken) {
+  function deploy(address _underlying) external returns (address) {
     bytes32 salt = keccak256(abi.encode(msg.sender, _underlying));
     return address(new BToken{salt: salt}(msg.sender, _underlying));
   }

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.3;
+pragma solidity 0.8.6;
 
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/token/ERC20/presets/ERC20PresetMinterPauser.sol';
-import 'OpenZeppelin/openzeppelin-contracts@4.0.0/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/token/ERC20/presets/ERC20PresetMinterPauser.sol';
+import 'OpenZeppelin/openzeppelin-contracts@4.2.0/contracts/token/ERC20/extensions/draft-ERC20Permit.sol';
 
 contract BetaToken is ERC20PresetMinterPauser('Beta Token', 'BETA'), ERC20Permit('BETA') {
   function _beforeTokenTransfer(
