@@ -14,6 +14,9 @@ interface IBetaConfig {
   /// @dev Returns the ratio of which the given token consider for collateral value.
   function getCollFactor(address token) external view returns (uint);
 
+  /// @dev Returns the max amount of collateral to accept globally.
+  function getCollMaxAmount(address token) external view returns (uint);
+
   /// @dev Returns max ltv of collateral / debt to allow a new position.
   function getSafetyLTV(address token) external view returns (uint);
 

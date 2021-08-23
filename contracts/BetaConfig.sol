@@ -12,7 +12,7 @@ contract BetaConfig is IBetaConfig {
 
   event SetGovernor(address governor);
   event SetPendingGovernor(address pendingGovernor);
-  event SetCollFactor(address indexed token, uint factor);
+  event SetCollInfo(address indexed token, uint factor, uint maxAmount);
   event SetRiskLevel(address indexed token, uint level);
   event SetRiskConfig(
     uint indexed level,
@@ -28,6 +28,7 @@ contract BetaConfig is IBetaConfig {
   uint public override reserveRate;
 
   mapping(address => uint) public cFactors; // collateral factors
+  mapping(address => uint) public cMaxAmounts; // collateral max amounts
   mapping(address => uint) public rLevels; // risk levels
   mapping(uint => RiskConfig) public rConfigs; // risk configurations
 
@@ -53,14 +54,21 @@ contract BetaConfig is IBetaConfig {
     emit SetGovernor(msg.sender);
   }
 
-  /// @dev Updates collateral factors of the given tokens.
-  function setCollFactors(address[] calldata tokens, uint[] calldata factors) external {
-    require(msg.sender == governor, 'setCollFactors/not-governor');
-    require(tokens.length == factors.length, 'setCollFactors/bad-length');
+  /// @dev Updates collateral information of the given tokens.
+  function setCollInfos(
+    address[] calldata tokens,
+    uint[] calldata factors,
+    uint[] calldata maxAmounts
+  ) external {
+    require(msg.sender == governor, 'setCollInfos/not-governor');
+    require(tokens.length == factors.length, 'setCollInfos/bad-length');
+    require(tokens.length == maxAmounts.length, 'setCollInfos/bad-length');
     for (uint idx = 0; idx < tokens.length; idx++) {
-      require(factors[idx] <= 1e18, 'setCollFactors/bad-factor-value');
+      require(factors[idx] <= 1e18, 'setCollInfos/bad-factor-value');
+      require(maxAmounts[idx] > 0, 'setCollInfos/bad-max-amount-value');
       cFactors[tokens[idx]] = factors[idx];
-      emit SetCollFactor(tokens[idx], factors[idx]);
+      cMaxAmounts[tokens[idx]] = maxAmounts[idx];
+      emit SetCollInfo(tokens[idx], factors[idx], maxAmounts[idx]);
     }
   }
 
@@ -111,6 +119,13 @@ contract BetaConfig is IBetaConfig {
     uint factor = cFactors[_token];
     require(factor > 0, 'getCollFactor/no-collateral-factor');
     return factor;
+  }
+
+  /// @dev Returns the collateral max amount of the given token. Must be greater than zero.
+  function getCollMaxAmount(address _token) external view override returns (uint) {
+    uint maxAmount = cMaxAmounts[_token];
+    require(maxAmount > 0, 'getCollFactor/no-collateral-max-amount');
+    return maxAmount;
   }
 
   /// @dev Returns the risk level of the given token. Zero is the default value of all tokens.

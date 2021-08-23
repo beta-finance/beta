@@ -70,8 +70,9 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
   mapping(address => bool) public runnerWhitelists; // whitelist of authorized routers
   mapping(address => bool) public ownerWhitelists; // whitelist of authorized owners
 
-  mapping(address => mapping(uint => Position)) public positions; // mapping from user to pool id to Position info
+  mapping(address => mapping(uint => Position)) public positions; // mapping from user to the user's position id to Position info
   mapping(address => uint) public nextPositionIds; // mapping from user to next position id (position count)
+  mapping(address => uint) public totalCollaterals; // mapping from token address to amount of collateral
 
   /// @dev Reentrancy guard modifier
   modifier lock() {
@@ -333,8 +334,13 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
       uint balAfter = IERC20(pos.collateral).balanceOf(address(this));
       amount = balAfter - balBefore;
     }
-    // 3. update the position - no collateral check required
+    // 3. update the position and total collateral + check global collateral cap
     pos.collateralSize += amount;
+    totalCollaterals[pos.collateral] += amount;
+    require(
+      totalCollaterals[pos.collateral] <= IBetaConfig(config).getCollMaxAmount(pos.collateral),
+      'put/too-much-collateral'
+    );
     positions[_owner][_pid].collateralSize = pos.collateralSize;
     positions[_owner][_pid].blockBorrowPut = uint32(block.number);
     emit Put(_owner, _pid, _amount, msg.sender);
@@ -352,8 +358,9 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
     // 1. pre-conditions
     Position memory pos = positions[_owner][_pid];
     require(pos.blockBorrowPut != uint32(block.number), 'take/bad-block');
-    // 2. update position collateral size
+    // 2. update position collateral size and total collateral
     pos.collateralSize -= _amount;
+    totalCollaterals[pos.collateral] -= _amount;
     positions[_owner][_pid].collateralSize = pos.collateralSize;
     positions[_owner][_pid].blockRepayTake = uint32(block.number);
     // 3. make sure the position is still safe
@@ -388,11 +395,12 @@ contract BetaBank is IBetaBank, Initializable, Pausable {
       collValue + (collValue * IBetaConfig(config).getKillBountyRate(underlying)) / 1e18,
       pos.collateralSize
     );
-    // 4. update the position
+    // 4. update the position and total collateral
     pos.debtShare -= debtShare;
     positions[_owner][_pid].debtShare = pos.debtShare;
     pos.collateralSize -= payout;
     positions[_owner][_pid].collateralSize = pos.collateralSize;
+    totalCollaterals[pos.collateral] -= payout;
     // 5. transfer the payout out
     IERC20(pos.collateral).safeTransfer(msg.sender, payout);
     emit Liquidate(_owner, _pid, _amount, debtShare, payout, msg.sender);

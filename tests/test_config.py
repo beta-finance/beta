@@ -60,31 +60,52 @@ def test_config_collateral_factors():
     config = a[0].deploy(BetaConfig, a[0], 0)
     with brownie.reverts("getCollFactor/no-collateral-factor"):
         assert config.getCollFactor(TOKENA)
-    with brownie.reverts("setCollFactors/not-governor"):
-        assert config.setCollFactors(
-            [TOKENA, TOKENB], [mathval(0.75), mathval(1.00)], {"from": a[1]}
+    with brownie.reverts("setCollInfos/not-governor"):
+        assert config.setCollInfos(
+            [TOKENA, TOKENB],
+            [mathval(0.75), mathval(1.00)],
+            [2 ** 256 - 1] * 2,
+            {"from": a[1]},
         )
-    with brownie.reverts("setCollFactors/bad-length"):
-        assert config.setCollFactors(
-            [TOKENA], [mathval(0.75), mathval(1.00)], {"from": a[0]}
+    with brownie.reverts("setCollInfos/bad-length"):
+        assert config.setCollInfos(
+            [TOKENA], [mathval(0.75), mathval(1.00)], [2 ** 256 - 1] * 1, {"from": a[0]}
         )
-    with brownie.reverts("setCollFactors/bad-factor-value"):
-        assert config.setCollFactors(
-            [TOKENA, TOKENB], [mathval(0.75), mathval(1.01)], {"from": a[0]}
+    with brownie.reverts("setCollInfos/bad-length"):
+        assert config.setCollInfos([TOKENA], [mathval(0.75)], [1] * 2, {"from": a[0]})
+    with brownie.reverts("setCollInfos/bad-max-amount-value"):
+        assert config.setCollInfos([TOKENA], [mathval(0.75)], [0], {"from": a[0]})
+    with brownie.reverts("setCollInfos/bad-max-amount-value"):
+        assert config.setCollInfos(
+            [TOKENA, TOKENB], [mathval(0.75), mathval(1.00)], [1, 0], {"from": a[0]}
         )
-    assert config.setCollFactors(
-        [TOKENA, TOKENB], [mathval(0.75), mathval(1.00)], {"from": a[0]}
+    with brownie.reverts("setCollInfos/bad-factor-value"):
+        assert config.setCollInfos(
+            [TOKENA, TOKENB],
+            [mathval(0.75), mathval(1.01)],
+            [2 ** 256 - 1] * 2,
+            {"from": a[0]},
+        )
+    assert config.setCollInfos(
+        [TOKENA, TOKENB],
+        [mathval(0.75), mathval(1.00)],
+        [2 ** 256 - 1] * 2,
+        {"from": a[0]},
     )
     assert config.getCollFactor(TOKENA) == mathval(0.75)
     assert config.getCollFactor(TOKENB) == mathval(1.00)
+    assert config.getCollMaxAmount(TOKENA) == 2 ** 256 - 1
+    assert config.getCollMaxAmount(TOKENB) == 2 ** 256 - 1
     with brownie.reverts("getCollFactor/no-collateral-factor"):
         assert config.getCollFactor(TOKENC)
-    assert config.setCollFactors(
-        [TOKENB, TOKENC], [mathval(0.85), mathval(1.00)], {"from": a[0]}
+    config.setCollInfos(
+        [TOKENB, TOKENC], [mathval(0.85), mathval(1.00)], [1000, 2000], {"from": a[0]}
     )
     assert config.getCollFactor(TOKENA) == mathval(0.75)
     assert config.getCollFactor(TOKENB) == mathval(0.85)
     assert config.getCollFactor(TOKENC) == mathval(1.00)
+    assert config.getCollMaxAmount(TOKENB) == 1000
+    assert config.getCollMaxAmount(TOKENC) == 2000
 
 
 def test_config_default_level():
