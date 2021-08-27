@@ -2,7 +2,7 @@
 
 ## Overview
 
-This bug bounty document is to verify that [Beta Finance] hosts a bug bounty on Immunefi at the address [https://immunefi.com/bounty/88mph/](https://immunefi.com/bounty/88mph/).
+This bug bounty document is to verify that [Beta Finance] hosts a bug bounty on Immunefi at the address [https://immunefi.com/bounty/betafinance/](https://immunefi.com/bounty/betafinance/).
 
 If you have found a vulnerability in our project, it must be submitted through [Immunefi's platform](https://immunefi.com/). Immunefi will handle bug bounty communications.
 
